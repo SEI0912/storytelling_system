@@ -1,0 +1,33 @@
+{
+  "positive": [
+    { "question": "Is the character smiling with an upward mouth shape?", "weight": 1.5 },
+    { "question": "Does the character appear cheerful or happy?", "weight": 1.5 },
+    { "question": "Is the character showing a joyful expression?", "weight": 1.5 },
+    { "question": "Are the character's eyes curved or narrowed as if smiling?", "weight": 1.2 },
+    { "question": "Are the character's cheeks raised as if smiling?", "weight": 1.2 }
+  ],
+
+  "negative": [
+    { "question": "Is the character crying with visible tears on the face?", "weight": 2.0 },
+    { "question": "Is the character crying or near tears?", "weight": 2.0 },
+    { "question": "Is the character showing a sad or troubled expression?", "weight": 1.5 },
+    { "question": "Is the character screaming or shouting in distress?", "weight": 1.8 },
+    { "question": "Does the character look scared or anxious?", "weight": 1.5 }
+  ],
+
+  "high_intensity": [
+    { "question": "Is the emotional reaction strong or exaggerated?", "weight": 1.5 },
+    { "question": "Is the character very excited or energetic?", "weight": 1.3 },
+    { "question": "Is the character shouting or expressing strong emotion?", "weight": 1.8 },
+    { "question": "Is the character showing signs of fear or panic?", "weight": 1.8 },
+    { "question": "Is the expression intense with wide mouth or big movement?", "weight": 1.5 }
+  ],
+
+  "low_intensity": [
+    { "question": "Is the emotion mild or subtle?", "weight": 1.0 },
+    { "question": "Is the character only slightly happy?", "weight": 1.0 },
+    { "question": "Is the character only slightly sad?", "weight": 1.0 },
+    { "question": "Does the character show a small or soft reaction?", "weight": 1.0 },
+    { "question": "Does the scene feel calm and low in emotional energy?", "weight": 1.0 }
+  ]
+}

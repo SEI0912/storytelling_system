@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sota 絵本読み聞かせ</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            overflow: hidden; /* ページめくり中にスクロールバーが出ないように */
+        }
+        #flipbook-container {
+            width: 1400px; /* 見開き全体の幅 */
+            height: 1060px; /* 見開き全体の高さ */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            border-radius: 5px;
+            background-color: #f0f0f0;
+            position: relative; /* turn.jsの要素の位置決めに必要 */
+        }
+        #flipbook {
+            width: 100%;
+            height: 100%;
+            display: flex; /* turn.jsのページを横並びにするため */
+        }
+        .page {
+            width: 50%; /* doubleモードでは各ページはflipbookの50%幅 */
+            height: 100%;
+            background-color: #ffffff;
+            display: flex; /* 画像を中央揃えにするため */
+            justify-content: center;
+            align-items: center;
+            border: 1px solid #eee;
+            box-sizing: border-box; /* paddingやborderを幅に含める */
+            overflow: hidden; /* 画像がはみ出さないように */
+        }
+        /* 画像がページ内に収まるように調整 */
+       .page img {
+        max-width: 100%;
+        max-height: 100%;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+       }
+    </style>
+</head>
+<body>
+
+    <div id="flipbook-container">
+        <div id="flipbook">
+            <div class="page cover"><img src="{{ url_for('static', filename=book_image_dir + '/page1.jpg') }}" alt="表紙"></div>
+            
+            {% for page_image in content_pages %}
+                {% if loop.index % 2 == 1 %}
+                    <div class="page odd"><img src="{{ url_for('static', filename=book_image_dir + '/' + page_image) }}" alt="{{ loop.index + 1 }}ページ目"></div>
+                {% else %}
+                    <div class="page even"><img src="{{ url_for('static', filename=book_image_dir + '/' + page_image) }}" alt="{{ loop.index + 1 }}ページ目"></div>
+                {% endif %}
+            {% endfor %}
+
+            <div class="page even"><img src="{{ url_for('static', filename=book_image_dir + '/' + last_page_image) }}" alt="最終ページ"></div>
+        </div>
+        </div>
+
+        <!-- アンケートQR表示オーバーレイ -->
+        <div id="surveyOverlay" style="
+        display:none;
+        position:fixed; inset:0;
+        background:rgba(0,0,0,0.75);
+        z-index:9999;
+        align-items:center; justify-content:center;
+        ">
+        <div style="
+            background:#fff; padding:24px; border-radius:16px;
+            width:min(520px, 92vw); text-align:center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        ">
+            <h2 style="margin:0 0 10px 0;">アンケートにご協力ください</h2>
+            <p style="margin:0 0 14px 0; color:#555;">スマホでQRコードを読み取って回答してください</p>
+            <div id="qrcode" style="display:flex; justify-content:center; margin:12px 0;"></div>
+            <p id="surveyText" style="word-break:break-all; font-size:12px; color:#777; margin:10px 0 0 0;"></p>
+            <button id="closeSurvey" style="
+            margin-top:16px; padding:10px 16px; border:none;
+            border-radius:10px; cursor:pointer;
+            ">閉じる</button>
+        </div>
+        </div>
+    
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="{{ url_for('static', filename='turn.js') }}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+
+    <script>
+        $(document).ready(function() {
+            var $flipbook = $("#flipbook");
+            var pendingTurnData = null; // Sotaからのめくり指示データを一時保存
+            var isAnimating = false; // Turn.jsがアニメーション中かどうかのフラグ
+
+            // flipbookの初期化
+            $flipbook.turn({
+                width: 1400,  
+                height: 1060, 
+                autoCenter: true,
+                gradients: true,
+                acceleration: true,
+                display: 'double', 
+                page: 1, 
+                duration: 600 // 初期めくり速度を設定（最初のめくり用）
+            });
+
+            // Turn.js のイベントをバインド
+            $flipbook.bind('turning', function(event, page, view) {
+                isAnimating = true; // めくり開始
+                console.log('--- ページめくりアニメーション開始 ---');
+            });
+
+            $flipbook.bind('turned', function(event, page, view) {
+                isAnimating = false; // めくり完了
+                console.log('--- ページめくりアニメーション完了。現在のページ:', page);
+
+                // もし保留中のめくり指示があれば、その速度を次のめくりのために設定
+                if (pendingTurnData) {
+                    try {
+                        // アニメーション完了後にdurationを設定
+                        $flipbook.turn('setDuration', pendingTurnData.flip_duration); 
+                        console.log('Turn.js duration を ' + pendingTurnData.flip_duration + 'ms に設定しました (めくり完了後)。');
+                    } catch (e) {
+                        console.error('Turn.js duration 設定中にエラーが発生しました (めくり完了後):', e);
+                    }
+                    
+                    // 次のめくりを開始
+                    $flipbook.turn('next');
+                    console.log('保留中のコマンドで次のページをめくりました。');
+                    pendingTurnData = null; // 処理したのでクリア
+
+                } else {
+                    console.log('保留中のめくりコマンドはありません。次のコマンドを待ちます。');
+                }
+            });
+
+            // WebSocket接続の確立
+            var socket = io();
+
+            // Flaskサーバーから 'turn_page_command' イベントを受け取った時の処理
+            socket.on('turn_page_command', function(data) {
+                console.log('--- ページめくりコマンド受信 ---');
+                console.log('受信した生データ:', data);
+                
+                var nextFlipDuration = data.flip_duration || 600; // 受け取っためくり速度
+                console.log('受信しためくり速度:', nextFlipDuration + 'ms');
+
+                var currentPage = $flipbook.turn('page');
+                var totalPages = $flipbook.turn('pages');
+
+                if (currentPage < totalPages) {
+                    if (isAnimating) {
+                        // 現在アニメーション中の場合は、コマンドを保留
+                        pendingTurnData = { flip_duration: nextFlipDuration };
+                        console.log('現在アニメーション中のため、コマンドを保留しました。');
+                    } else {
+                        // アニメーション中でない場合は、すぐに速度を設定してめくる
+                        try {
+                            $flipbook.turn('setDuration', nextFlipDuration); // 新しいメソッドを呼び出す
+                            console.log('Turn.js duration を ' + nextFlipDuration + 'ms に設定しました (即時実行)。');
+                        } catch (e) {
+                            console.error('Turn.js duration 設定中にエラーが発生しました (即時実行):', e);
+                            console.warn('めくり速度の設定に失敗したため、前回の速度でめくります。');
+                        }
+                        $flipbook.turn('next');
+                        console.log('ページをめくりました。現在のページ:', $flipbook.turn('page'));
+                    }
+                } else {
+                    console.log('これ以上めくるページがありません。');
+                }
+                console.log('--- ページめくりコマンド処理終了 ---');
+            });
+
+            // ===== アンケートQR表示 =====
+            socket.on('show_survey_qr', function(payload) {
+            var url = (payload && payload.survey_url) ? payload.survey_url : "";
+            if (!url) {
+                console.warn("survey_url が空なのでQR表示しません");
+                return;
+            }
+
+            var overlay = document.getElementById("surveyOverlay");
+            var qrArea  = document.getElementById("qrcode");
+            var txt     = document.getElementById("surveyText");
+
+            // 前回のQRを消す
+            qrArea.innerHTML = "";
+            txt.textContent = url;
+
+            // QR生成
+            new QRCode(qrArea, { text: url, width: 260, height: 260 });
+
+            // 表示
+            overlay.style.display = "flex";
+            console.log("アンケートQRを表示しました:", url);
+            });
+
+            // 閉じるボタン
+            document.getElementById("closeSurvey").addEventListener("click", function() {
+            document.getElementById("surveyOverlay").style.display = "none";
+            });
+
+            // 背景クリックでも閉じる（任意）
+            document.getElementById("surveyOverlay").addEventListener("click", function(e) {
+            if (e.target.id === "surveyOverlay") {
+                e.currentTarget.style.display = "none";
+            }
+            });
+
+
+            socket.on('connect_error', function(err) {
+                console.error('WebSocket接続エラー:', err);
+            });
+            socket.on('disconnect', function(reason) {
+                console.log('WebSocket切断:', reason);
+            });
+        });
+    </script>
+</body>
+</html>
