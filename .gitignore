@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.env
+
+# Java
+*.class
+
+# キャッシュ（音声・生成物）
+*_speech_cache/
+suhu_*_speech_cache/
+inu_*_speech_cache/
+
+# 一時生成物
+*.wav
+*.log
+
+# VS Code
+.vscode/
